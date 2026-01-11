@@ -1,1 +1,1 @@
-"# Clickstream Analytics Collector" 
+# Clickstream Analytics Collector 
