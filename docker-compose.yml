@@ -1,5 +1,5 @@
-#version: "3.8"
 services:
+  # KAFKA
   kafka:
     image: bitnamilegacy/kafka:latest
     container_name: kafka
@@ -21,3 +21,21 @@ services:
       - KAFKA_CLIENT_PASSWORDS=Nrxen@2026
       - KAFKA_CFG_SASL_ENABLED_MECHANISMS=PLAIN
       - KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL=PLAINTEXT
+
+  # DATABASE
+  postgres:
+    image: postgres:15
+    container_name: events_db
+    ports:
+      - "3430:5432"
+    environment:
+      POSTGRES_DB: events_db
+      POSTGRES_USER: events_user
+      POSTGRES_PASSWORD: events_pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+# Define the named volume explicitly
+volumes:
+  pgdata:
