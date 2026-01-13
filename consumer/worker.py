@@ -1,5 +1,5 @@
 from confluent_kafka import Consumer
-import json, signal, sys
+import json,signal,sys,time
 
 conf = {
     "bootstrap.servers": "192.168.20.17:3420",
@@ -12,40 +12,61 @@ conf = {
     "enable.auto.commit": False,
 }
 
-Consumer = Consumer(conf)
-Consumer.subscribe(["raw_events"])
+consumer = Consumer(conf)
+consumer.subscribe(["raw_events"])
 
 def shutdown(sig, frame):
     print("Shutting down consumer...")
-    Consumer.close()
+    consumer.close()
     sys.exit(0)
 
 signal.signal(signal.SIGINT, shutdown)
 signal.signal(signal.SIGTERM, shutdown)
 
-print("Consumer started... Waiting for messages")
+print("Consumer started...")
+
+BATCH_SIZE = 100
+POLL_TIMEOUT = 1.0
+FLUSH_INTERVAL = 2.0 
+
+batch = []
+last_flush_time = time.time()
 
 try:
     while True:
-        msg = Consumer.poll(1.0)
+        msg = consumer.poll(POLL_TIMEOUT)
         if msg is None:
-            continue
+            pass
+        elif msg.error():
+            print(f"Consumer error: {msg.error()}")
+        else:
+            raw_val = msg.value()
+            if raw_val is None or len(raw_val) == 0:
+                print("Warning: Received empty message")
+            else:
+                try:
+                    val_str = raw_val.decode("utf-8")
+                    event = json.loads(val_str)
+                    batch.append(event)
+                except json.JSONDecodeError:
+                    print(f"Failed to decode: {raw_val}")
+                except Exception as e:
+                    print(f"ERROR: Unexpected error: {e}")
+        now = time.time()
+        should_flush = (
+            len(batch) >= BATCH_SIZE or
+            (batch and now - last_flush_time >= FLUSH_INTERVAL)
+        )
+        if should_flush:
+            print(f"Processing batch of size {len(batch)}...")
+            for e in batch:
+                pass 
+            consumer.commit(asynchronous=False)
+            print("Commit successful.")
+            batch.clear()
+            last_flush_time = now
 
-        raw_val = msg.value()
-        if raw_val is None or len(raw_val)==0:
-            print("Warning: Received empty message")
-            continue
-
-        try:
-            val_str = raw_val.decode("utf-8")
-            event = json.loads(val_str)
-            print("consumed: ", event)
-        except json.JSONDecodeError as e :
-            print(f"Failed to decode: {raw_val}")
-        except Exception as e:
-            print(f"ERROR: Unexpected error: {e}")
-            continue
 except KeyboardInterrupt:
     pass
 finally:
-    Consumer.close()
+    consumer.close()
